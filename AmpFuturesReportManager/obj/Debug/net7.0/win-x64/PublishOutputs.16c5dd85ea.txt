@@ -1,2 +1,0 @@
-C:\Users\casim\Desktop\Amp Futures Report Manager\AmpFuturesReportManager\AmpFuturesReportManager\bin\Debug\net7.0\win-x64\publish\AmpFuturesReportManager.pdb
-C:\Users\casim\Desktop\Amp Futures Report Manager\AmpFuturesReportManager\AmpFuturesReportManager\bin\Debug\net7.0\win-x64\publish\AmpFuturesReportManager.exe
