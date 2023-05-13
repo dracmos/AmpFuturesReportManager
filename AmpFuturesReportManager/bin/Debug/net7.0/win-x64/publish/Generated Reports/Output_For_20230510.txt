@@ -1,0 +1,28 @@
+Entry Date: 10/05/2023   Exit Date:10/05/2023
+Profit/Loss Including Fees: 3,76
+Profit/Loss: 5,00
+Fees: 1,24
+Operation Type: Sell
+Contract: M2K Future JUN 23
+Entry Price: 1761,80     Trade Number: 166491681
+Exit Price: 1760,80     Trade Number: 166493185
+Ticks: 10,0
+Quantity: 1
+Currency: USD
+----------------------------------------
+Entry Date: 10/05/2023   Exit Date:10/05/2023
+Profit/Loss Including Fees: 0,76
+Profit/Loss: 2,00
+Fees: 1,24
+Operation Type: Sell
+Contract: M2K Future JUN 23
+Entry Price: 1748,40     Trade Number: 166502409
+Exit Price: 1748,00     Trade Number: 166502694
+Ticks: 4,0
+Quantity: 1
+Currency: USD
+----------------------------------------
+Total Profit/Loss Including Fees: 4,52
+Total Profit/Loss: 7,00
+Total Ticks: 14,0
+Total Fees: 2,48
