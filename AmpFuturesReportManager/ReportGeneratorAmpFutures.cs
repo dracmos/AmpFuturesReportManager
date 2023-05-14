@@ -4,21 +4,25 @@ using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 using UglyToad.PdfPig;
 using AmpFuturesReportManager.Application.Modes;
+using CsvHelper.Configuration;
+using CsvHelper;
 
 namespace AmpFuturesReportManager.Application;
 
 public class ReportGenerator
 {
     private readonly List<string> _inputReportNames;
+    private readonly ReportType _reportType;
 
-    public ReportGenerator(List<string> inputReportNames)
+    public ReportGenerator(List<string> inputReportNames, ReportType reportType)
     {
         _inputReportNames = inputReportNames;
+        _reportType = reportType;
     }
 
     public void CreateOutputFile()
     {
-        StringBuilder finalReport = new StringBuilder();
+        StringBuilder finalReport = new();
         decimal totalProfitLoss = 0;
         decimal totalProfitLossIncludingFees = 0;
         decimal totalTicks = 0;
@@ -26,11 +30,24 @@ public class ReportGenerator
 
         foreach (var inputReportName in _inputReportNames)
         {
-            List<string> lines = GetAllTextualLinesFromPurceaseSaleTable(inputReportName);
-            List<Operation> operations = GetOperationsFromTextualLines(lines);
+            List<Operation> operations = new();
 
-            // Order operations by TradeNumber Ascending: on top the oldest
-            operations = operations.OrderBy(o => o.TradeNumber).ToList();
+            if (_reportType == ReportType.AMPFutures)
+            {
+                List<string> lines = GetAllTextualLinesFromAMPReportPurchaseSaleTable(inputReportName);
+                operations = GetOperationsFromTextualLines(lines);
+                // Order operations by TradeNumber Ascending: on top the oldest
+                operations = operations.OrderBy(o => o.TradeNumber).ToList();
+            }
+            else if (_reportType == ReportType.CQG)
+            {
+                operations = ReadOperationsFromCQGCSVFile(inputReportName);
+                operations = operations.OrderBy(o => o.Date).ToList();
+            }
+            else
+            {
+                throw new Exception("Report Type Not Supported");
+            }
 
             List<RoundTripOperation> roundTripOperations = GenerateRoundTripOperations(operations);
 
@@ -54,6 +71,65 @@ public class ReportGenerator
         Console.WriteLine(finalReport.ToString());
         GenerateOutputFile(finalReport.ToString());
     }
+
+    public List<Operation> ReadOperationsFromCQGCSVFile(string inputReportName)
+    {
+        List<Operation> orderListFromCSV = new List<Operation>();
+
+        var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+        {
+            PrepareHeaderForMatch = args => args.Header.ToLower(),
+            HasHeaderRecord = false,
+            IgnoreBlankLines = true
+        };
+
+        using (var reader = new StreamReader(inputReportName))
+        using (var csv = new CsvReader(reader, config))
+        {
+            // Skip first 3 lines
+            for (int i = 0; i < 3; i++)
+            {
+                csv.Read();
+            }
+
+            var records = new List<OrderFromCSV>();
+
+            while (csv.Read())
+            {
+                try
+                {
+                    var record = csv.GetRecord<OrderFromCSV>();
+                    records.Add(record);
+                }
+                catch (CsvHelperException)
+                {
+                    // Couldn't parse the record to Order, so skip it
+                    continue;
+                }
+            }
+            foreach (var record in records)
+            {
+                Operation operation = new()
+                {
+                    Date = DateTime.ParseExact(record.FillT, "dd/MM/yy HH:mm:ss", CultureInfo.InvariantCulture),
+                    TradeNumber = long.Parse(record.Hash),
+                    Quantity = record.Qty,
+                    Type = record.BS == "BUY" ? OperationType.Buy : OperationType.Sell,
+                    ContractDescription = record.Symbol,
+                    TradePrice = decimal.Parse(record.AvgFillP.Replace(",", "."), CultureInfo.InvariantCulture),
+                    Currency = "USD"
+                };
+                operation.Contract = GetContract(operation.ContractDescription);
+                operation.Market = operation.Contract.Market;
+
+                orderListFromCSV.Add(operation);
+
+            }
+        }
+
+        return orderListFromCSV;
+    }
+
     private string GenerateReport(List<RoundTripOperation> roundTripOperations)
     {
         StringBuilder reportForFile = new StringBuilder();
@@ -90,7 +166,7 @@ public class ReportGenerator
         {
             var date = line[..9];
             var tradeNumber = line[11..20];
-            var market = line[21..36].Trim();
+            //var market = line[21..36].Trim();
             var contractDescription = line[49..85].Trim();
             var tradePrice = line[100..107];
             var currency = line[111..].Trim();
@@ -98,14 +174,15 @@ public class ReportGenerator
 
             var operation = new Operation
             {
-                Date = DateOnly.ParseExact(date, "dd-MMM-yy", CultureInfo.InvariantCulture),
+                Date = DateTime.ParseExact(date, "dd-MMM-yy", CultureInfo.InvariantCulture),
                 TradeNumber = long.Parse(tradeNumber), // Parsing as long
-                Market = market,
                 Contract = GetContract(contractDescription),
                 ContractDescription = contractDescription,
                 TradePrice = decimal.Parse(tradePrice, CultureInfo.InvariantCulture),
                 Currency = currency
             };
+
+            operation.Market = operation.Contract.Market;
 
             //The buys are when we have a value in the column 37
             if (quantity[0] != ' ')
@@ -130,7 +207,7 @@ public class ReportGenerator
     {
         string[] contractDescriptionWords = contractDescription.Split(' ');
         Contract contract;
-        if (contractDescriptionWords.Length > 0 && contractDescriptionWords[0] == "M2K")
+        if (contractDescriptionWords.Length > 0 && contractDescriptionWords[0].Contains("M2K"))
         {
             contract = new RusselMicro();
         }
@@ -144,7 +221,16 @@ public class ReportGenerator
 
     private List<RoundTripOperation> GenerateRoundTripOperations(List<Operation> operations)
     {
-        var sortedOperations = operations.OrderBy(o => o.TradeNumber).ToList();
+        List<Operation> sortedOperations;
+
+        if (_reportType == ReportType.AMPFutures)
+        {
+            sortedOperations = operations.OrderBy(o => o.TradeNumber).ToList();
+        }
+        else
+        {
+            sortedOperations = operations.OrderBy(o => o.Date).ToList();
+        }
 
         var pendingBuyOperations = new LinkedList<Operation>();
         var pendingSellOperations = new LinkedList<Operation>();
@@ -203,13 +289,43 @@ public class ReportGenerator
     }
     private RoundTripOperation GeneratePartialRoundTripOperation(Operation buyOperation, Operation sellOperation, int quantity)
     {
+        Operation openOperation, closeOperation;
+
+
+        if (_reportType == ReportType.AMPFutures)
+        {
+            if (sellOperation.TradeNumber < buyOperation.TradeNumber)
+            {
+                openOperation = sellOperation;
+                closeOperation = buyOperation;
+            }
+            else
+            {
+                openOperation = buyOperation;
+                closeOperation = sellOperation;
+            }
+        }
+        else
+        {
+            if (sellOperation.Date < buyOperation.Date)
+            {
+                openOperation = sellOperation;
+                closeOperation = buyOperation;
+            }
+            else
+            {
+                openOperation = buyOperation;
+                closeOperation = sellOperation;
+            }
+        }
+
         var roundTripOperation = new RoundTripOperation
         {
-            Contract = buyOperation.Contract,
-            Type = buyOperation.Type,
+            Contract = openOperation.Contract,
+            Type = openOperation.Type,
             Quantity = quantity,
-            OpenOperation = buyOperation,
-            CloseOperation = sellOperation,
+            OpenOperation = openOperation,
+            CloseOperation = closeOperation,
             BuyOperation = buyOperation,
             SellOperation = sellOperation,
         };
@@ -228,46 +344,6 @@ public class ReportGenerator
         return roundTripOperation;
     }
 
-
-    //private List<RoundTripOperation> GenerateRoundTripOperations(List<Operation> operations)
-    //{
-    //    var roundTripOperations = new List<RoundTripOperation>();
-
-    //    for (int i = 0; i < operations.Count; i += 2)
-    //    {
-    //        var openOperation = operations[i];
-    //        var closeOperation = operations[i + 1];
-
-
-    //        //What will happen if we have two orders with the same type?
-    //        //This can happen if you open 2 positions long, because we are now ordering the data
-    //        var roundTripOperation = new RoundTripOperation
-    //        {
-    //            Contract = openOperation.Contract,
-    //            Type = openOperation.Type,
-    //            Quantity = openOperation.Quantity,
-    //            OpenOperation = openOperation,
-    //            CloseOperation = closeOperation,
-    //            BuyOperation = openOperation.Type == OperationType.Buy ? openOperation : closeOperation,
-    //            SellOperation = closeOperation.Type == OperationType.Sell ? closeOperation : openOperation,
-    //        };
-
-    //        decimal ticks;
-    //        if (roundTripOperation.Type == OperationType.Buy)
-    //            ticks = (roundTripOperation.CloseOperation.TradePrice * roundTripOperation.CloseOperation.Quantity) - (roundTripOperation.OpenOperation.TradePrice * roundTripOperation.OpenOperation.Quantity);
-    //        else
-    //            ticks = (roundTripOperation.OpenOperation.TradePrice * roundTripOperation.OpenOperation.Quantity) - (roundTripOperation.CloseOperation.TradePrice * roundTripOperation.CloseOperation.Quantity);
-
-    //        ticks /= roundTripOperation.Contract.TickMovement;
-    //        roundTripOperation.Ticks = ticks;
-    //        roundTripOperation.ProfitLoss = ticks * roundTripOperation.Contract.TickMoneyValue;
-    //        roundTripOperation.Fees = roundTripOperation.Contract.FeesForContract * roundTripOperation.Quantity * 2;
-
-    //        roundTripOperations.Add(roundTripOperation);
-    //    }
-
-    //    return roundTripOperations;
-    //}
 
     private string ReportDetailForRoundTripOperation(RoundTripOperation roundTripOperation)
     {
@@ -334,7 +410,7 @@ public class ReportGenerator
     }
 
     //I need the information of the Purchase & Sale table, that is the second table available in the Pdf Report
-    private List<string> GetAllTextualLinesFromPurceaseSaleTable(string inputReportName)
+    private List<string> GetAllTextualLinesFromAMPReportPurchaseSaleTable(string inputReportName)
     {
         List<string> resultLines = new List<string>();
         string filenameComplete = Path.Combine(Directory.GetCurrentDirectory(), "Input", inputReportName);

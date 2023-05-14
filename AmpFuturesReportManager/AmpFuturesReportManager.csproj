@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -9,16 +9,19 @@
 
   <ItemGroup>
     <None Remove="Input\20230510.PDF" />
+    <None Remove="Input\20230511.PDF" />
     <None Remove="Input\20230512.PDF" />
-    <None Remove="Input\Empty.txt" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="CsvHelper" Version="30.0.1" />
     <PackageReference Include="PdfPig" Version="0.1.7" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Input\" />
+    <None Update="Input\Empty.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

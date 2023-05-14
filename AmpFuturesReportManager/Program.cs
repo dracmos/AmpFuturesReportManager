@@ -1,4 +1,5 @@
 ﻿using AmpFuturesReportManager.Application;
+using AmpFuturesReportManager.Application.Modes;
 
 // Execute that command from the command prompt in the project folder to generate a self contained file:
 //dotnet publish -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeAllContentForSelfExtract=true
@@ -11,19 +12,25 @@ namespace AmpFuturesReportManager
         {
             ReportGenerator reportGenerator;
 
+            ReportType _reportType = ReportType.CQG;
+
+            string extension = "*.csv";
+            if (_reportType == ReportType.AMPFutures)
+                extension = "*.pdf";
+
             if (args.Length != 0)
             {
-                reportGenerator = new ReportGenerator(new List<string>() { args[0] });
+                reportGenerator = new ReportGenerator(new List<string>() { args[0] }, _reportType);
             }
             else
             {
-                List<string> reportListNames = Directory.EnumerateFiles(Path.Combine(Directory.GetCurrentDirectory(), "Input"), "*.pdf")
+                List<string> reportListNames = Directory.EnumerateFiles(Path.Combine(Directory.GetCurrentDirectory(), "Input"), extension)
                                                         .OrderBy(x => x)
                                                         .ToList();
 
                 if (reportListNames.Any())
                 {
-                    reportGenerator = new ReportGenerator(reportListNames);
+                    reportGenerator = new ReportGenerator(reportListNames, _reportType);
                 }
                 else
                 {

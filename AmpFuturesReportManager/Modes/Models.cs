@@ -1,11 +1,18 @@
-﻿namespace AmpFuturesReportManager.Application.Modes;
+﻿
+namespace AmpFuturesReportManager.Application.Modes;
+
+public enum ReportType
+{
+    AMPFutures,
+    CQG
+}
 
 
 public class Operation
 {
-    public DateOnly Date { get; set; }
-    public long TradeNumber { get; set; } // Changed to long to handle large numbers
-    public string Market { get; set; }
+    public DateTime Date { get; set; }
+    public long TradeNumber { get; set; }
+    public string Market { get; set; } = string.Empty;
     public int Quantity { get; set; }
     public OperationType Type { get; set; }
     public string ContractDescription { get; set; }
@@ -41,6 +48,7 @@ public abstract class Contract
     public abstract decimal TickMovement { get; set; }
     public abstract decimal TickMoneyValue { get; set; }
     public abstract decimal FeesForContract { get; set; }
+    public abstract string Market { get; set; }
 }
 
 public class RusselMicro : Contract
@@ -49,4 +57,26 @@ public class RusselMicro : Contract
     public override decimal TickMovement { get; set; } = 0.1M;
     public override decimal TickMoneyValue { get; set; } = 0.5M;
     public override decimal FeesForContract { get; set; } = 0.62M;
+    public override string Market { get; set; } = "CME";
+}
+
+public class OrderFromCSV
+{
+    public string Account { get; set; }
+    public string Status { get; set; }
+    public string BS { get; set; }
+    public int Qty { get; set; }
+    public int UnFld { get; set; }
+    public string Symbol { get; set; }
+    public string OrdP { get; set; }
+    public string AvgFillP { get; set; }
+    public string Type { get; set; }
+    public string LMTP { get; set; }
+    public string DUR { get; set; }
+    public int Fld { get; set; }
+    public string PlaceT { get; set; }
+    public string Hash { get; set; }
+    public string User { get; set; }
+    public string FillT { get; set; }
+    public string CXLT { get; set; }
 }
