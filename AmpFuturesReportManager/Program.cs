@@ -1,13 +1,6 @@
-﻿using System.Globalization;
-using System.Text;
-using UglyToad.PdfPig;
-using UglyToad.PdfPig.Content;
-using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
-using System.IO;
-using AmpFuturesReportManager.Application;
+﻿using AmpFuturesReportManager.Application;
 
 // Execute that command from the command prompt in the project folder to generate a self contained file:
-
 //dotnet publish -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeAllContentForSelfExtract=true
 
 namespace AmpFuturesReportManager
@@ -17,21 +10,20 @@ namespace AmpFuturesReportManager
         static void Main(string[] args)
         {
             ReportGenerator reportGenerator;
+
             if (args.Length != 0)
-                reportGenerator = new ReportGenerator(args[0]);
+            {
+                reportGenerator = new ReportGenerator(new List<string>() { args[0] });
+            }
             else
             {
-                // Get the Input directory
-                var inputDirectory = new DirectoryInfo(Path.Combine(Directory.GetCurrentDirectory(), "Input"));
+                List<string> reportListNames = Directory.EnumerateFiles(Path.Combine(Directory.GetCurrentDirectory(), "Input"), "*.pdf")
+                                                        .OrderBy(x => x)
+                                                        .ToList();
 
-                // Get the newest file
-                var newestFile = inputDirectory.GetFiles()
-                                               .OrderByDescending(f => f.LastWriteTime)
-                                               .FirstOrDefault();
-
-                if (newestFile != null)
+                if (reportListNames.Any())
                 {
-                    reportGenerator = new ReportGenerator(newestFile.Name);
+                    reportGenerator = new ReportGenerator(reportListNames);
                 }
                 else
                 {
@@ -44,6 +36,18 @@ namespace AmpFuturesReportManager
 
             Console.WriteLine("Press any key to exit...");
             Console.ReadKey();
+        }
+
+        private static FileInfo? GetTheLatestFilename()
+        {
+            // Get the Input directory
+            var inputDirectory = new DirectoryInfo(Path.Combine(Directory.GetCurrentDirectory(), "Input"));
+
+            // Get the newest file
+            var newestFile = inputDirectory.GetFiles("*.pdf")
+                                           .OrderByDescending(f => f.LastWriteTime)
+                                           .FirstOrDefault();
+            return newestFile;
         }
 
         //static void ParseDocument()

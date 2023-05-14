@@ -1,0 +1,79 @@
+﻿# Ignore bin and obj directories
+[Bb]in/
+[Oo]bj/
+
+# Ignore Visual Studio files
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+*.ipch
+*.opendb
+*.log
+*.vspscc
+*_i.c
+*_p.c
+*.ncb
+*.sdf
+*.opensdf
+*.sln.docstates
+
+# Ignore build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Nn][Yy]/
+
+# Ignore NuGet packages
+*.nuget.targets
+**/[Pp]ackages/
+*.lock
+*.nupkg
+*.paket.repos
+paket-files/
+
+# Ignore MSTest test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+# Ignore Resharper files
+*_ReSharper.*
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# Ignore StyleCop files
+StyleCop.Cache
+
+# Ignore Visual Studio code coverage files
+*.coverage
+*.coveragexml
+
+# Ignore Azure-specific files
+*.publishsettings
+*.pubxml
+
+# Ignore Fakes generated files
+*.fakes
+
+# Ignore build output of Web Essentials extension
+[Ww]ebsite[Vv]sdoc.[Cc]ompressed/*
+
+# Ignore NCrunch files
+_NCrunch_*
+.*crunch*.local.xml
+
+# Ignore build output from VS Code
+.vscode/
+
+# Ignore Rider files
+.idea/
+*.sln.iml
+*.ipr
+*.iws
+
+# Ignore Mac-specific files
+.DS_Store

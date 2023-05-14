@@ -9,54 +9,68 @@ namespace AmpFuturesReportManager.Application;
 
 public class ReportGenerator
 {
-    private readonly string _inputReportName;
-    public ReportGenerator(string inputReportName)
+    private readonly List<string> _inputReportNames;
+
+    public ReportGenerator(List<string> inputReportNames)
     {
-        _inputReportName = inputReportName;
+        _inputReportNames = inputReportNames;
     }
 
     public void CreateOutputFile()
     {
-        List<string> lines = GetAllTextualLinesFromPurceaseSaleTable();
-        List<Operation> operations = GetOperationsFromTextualLines(lines);
+        StringBuilder finalReport = new StringBuilder();
+        decimal totalProfitLoss = 0;
+        decimal totalProfitLossIncludingFees = 0;
+        decimal totalTicks = 0;
+        decimal totalFees = 0;
 
-        // Order operations by TradeNumber Ascending: on top the oldest
-        operations = operations.OrderBy(o => o.TradeNumber).ToList();
+        foreach (var inputReportName in _inputReportNames)
+        {
+            List<string> lines = GetAllTextualLinesFromPurceaseSaleTable(inputReportName);
+            List<Operation> operations = GetOperationsFromTextualLines(lines);
 
-        List<RoundTripOperation> roundTripOperations = GenerateRoundTripOperations(operations);
+            // Order operations by TradeNumber Ascending: on top the oldest
+            operations = operations.OrderBy(o => o.TradeNumber).ToList();
 
-        //// Print operations for testing
-        //foreach (var operation in operations)
-        //{
-        //    Console.WriteLine($"{operation.Date} {operation.TradeNumber} {operation.Market} {operation.Quantity} {operation.Type} {operation.ContractDescription} {operation.TradePrice} {operation.Currency}");
-        //}
+            List<RoundTripOperation> roundTripOperations = GenerateRoundTripOperations(operations);
 
-        string reportForFile = GenerateReport(roundTripOperations);
-        Console.WriteLine(reportForFile);
+            string reportForFile = GenerateReport(roundTripOperations);
+            string filename = Path.GetFileName(inputReportName);
+            finalReport.AppendLine($"########################## {filename} ##########################");
+            finalReport.AppendLine(reportForFile);
 
-        GenerateOutputFile(reportForFile);
+            totalProfitLoss += roundTripOperations.Sum(r => r.ProfitLoss);
+            totalProfitLossIncludingFees += roundTripOperations.Sum(r => r.ProfitLossIncludingFees);
+            totalTicks += roundTripOperations.Sum(r => r.Ticks);
+            totalFees += roundTripOperations.Sum(r => r.Fees);
+        }
 
+        finalReport.AppendLine("####################### Final Recap ###########################");
+        finalReport.AppendLine($"Total Profit/Loss Including Fees: {totalProfitLossIncludingFees}");
+        finalReport.AppendLine($"Total Profit/Loss: {totalProfitLoss}");
+        finalReport.AppendLine($"Total Ticks: {totalTicks}");
+        finalReport.AppendLine($"Total Fees: {totalFees}");
+
+        Console.WriteLine(finalReport.ToString());
+        GenerateOutputFile(finalReport.ToString());
     }
-
     private string GenerateReport(List<RoundTripOperation> roundTripOperations)
     {
-        string reportForFile = string.Empty;
+        StringBuilder reportForFile = new StringBuilder();
 
         foreach (RoundTripOperation roundTripOperation in roundTripOperations)
         {
             string textResult = ReportDetailForRoundTripOperation(roundTripOperation) + "----------------------------------------" + Environment.NewLine;
-            reportForFile += textResult;
+            reportForFile.AppendLine(textResult);
         }
         var summary = GenerateSummary(roundTripOperations);
-        reportForFile += summary;
-        return reportForFile;
+        reportForFile.AppendLine(summary);
+        return reportForFile.ToString();
     }
 
     private void GenerateOutputFile(string reportForFile)
     {
-        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(_inputReportName);
-
-        string outputFileName = $"Output_For_{fileNameWithoutExtension}.txt";
+        string outputFileName = $"Output_For_{DateTime.Now:yyyyMMddHHmmss}.txt";
 
         // Create the directory if it doesn't exist
         string outputDirectory = Path.Combine(Directory.GetCurrentDirectory(), "Generated Reports");
@@ -130,43 +144,130 @@ public class ReportGenerator
 
     private List<RoundTripOperation> GenerateRoundTripOperations(List<Operation> operations)
     {
+        var sortedOperations = operations.OrderBy(o => o.TradeNumber).ToList();
+
+        var pendingBuyOperations = new LinkedList<Operation>();
+        var pendingSellOperations = new LinkedList<Operation>();
+
         var roundTripOperations = new List<RoundTripOperation>();
 
-        for (int i = 0; i < operations.Count; i += 2)
+        foreach (var operation in sortedOperations)
         {
-            var openOperation = operations[i];
-            var closeOperation = operations[i + 1];
+            LinkedList<Operation> pendingOperations;
+            LinkedList<Operation> oppositePendingOperations;
 
-
-            //What will happen if we have two orders with the same type?
-            //This can happen if you open 2 positions long, because we are now ordering the data
-            var roundTripOperation = new RoundTripOperation
+            if (operation.Type == OperationType.Buy)
             {
-                Contract = openOperation.Contract,
-                Type = openOperation.Type,
-                Quantity = openOperation.Quantity,
-                OpenOperation = openOperation,
-                CloseOperation = closeOperation,
-                BuyOperation = openOperation.Type == OperationType.Buy ? openOperation : closeOperation,
-                SellOperation = closeOperation.Type == OperationType.Sell ? closeOperation : openOperation,
-            };
-
-            decimal ticks;
-            if (roundTripOperation.Type == OperationType.Buy)
-                ticks = (roundTripOperation.CloseOperation.TradePrice * roundTripOperation.CloseOperation.Quantity) - (roundTripOperation.OpenOperation.TradePrice * roundTripOperation.OpenOperation.Quantity);
+                pendingOperations = pendingBuyOperations;
+                oppositePendingOperations = pendingSellOperations;
+            }
             else
-                ticks = (roundTripOperation.OpenOperation.TradePrice * roundTripOperation.OpenOperation.Quantity) - (roundTripOperation.CloseOperation.TradePrice * roundTripOperation.CloseOperation.Quantity);
+            {
+                pendingOperations = pendingSellOperations;
+                oppositePendingOperations = pendingBuyOperations;
+            }
 
-            ticks /= roundTripOperation.Contract.TickMovement;
-            roundTripOperation.Ticks = ticks;
-            roundTripOperation.ProfitLoss = ticks * roundTripOperation.Contract.TickMoneyValue;
-            roundTripOperation.Fees = roundTripOperation.Contract.FeesForContract * roundTripOperation.Quantity * 2;
+            pendingOperations.AddLast(operation);
 
-            roundTripOperations.Add(roundTripOperation);
+            while (pendingBuyOperations.Any() && pendingSellOperations.Any())
+            {
+                var buyOperation = pendingBuyOperations?.First?.Value;
+                var sellOperation = pendingSellOperations?.First?.Value;
+
+                var quantityToMatch = Math.Min(buyOperation.Quantity, sellOperation.Quantity);
+
+                var roundTripOperation = GeneratePartialRoundTripOperation(buyOperation, sellOperation, quantityToMatch);
+                roundTripOperations.Add(roundTripOperation);
+
+                buyOperation.Quantity -= quantityToMatch;
+                sellOperation.Quantity -= quantityToMatch;
+
+                if (buyOperation.Quantity == 0)
+                {
+                    pendingBuyOperations.RemoveFirst();
+                }
+
+                if (sellOperation.Quantity == 0)
+                {
+                    pendingSellOperations.RemoveFirst();
+                }
+            }
+        }
+
+        if (pendingBuyOperations.Any() || pendingSellOperations.Any())
+        {
+            throw new Exception("Not all operations could be matched.");
         }
 
         return roundTripOperations;
     }
+    private RoundTripOperation GeneratePartialRoundTripOperation(Operation buyOperation, Operation sellOperation, int quantity)
+    {
+        var roundTripOperation = new RoundTripOperation
+        {
+            Contract = buyOperation.Contract,
+            Type = buyOperation.Type,
+            Quantity = quantity,
+            OpenOperation = buyOperation,
+            CloseOperation = sellOperation,
+            BuyOperation = buyOperation,
+            SellOperation = sellOperation,
+        };
+
+        decimal ticks;
+        if (roundTripOperation.Type == OperationType.Buy)
+            ticks = (roundTripOperation.CloseOperation.TradePrice * quantity) - (roundTripOperation.OpenOperation.TradePrice * quantity);
+        else
+            ticks = (roundTripOperation.OpenOperation.TradePrice * quantity) - (roundTripOperation.CloseOperation.TradePrice * quantity);
+
+        ticks /= roundTripOperation.Contract.TickMovement;
+        roundTripOperation.Ticks = ticks;
+        roundTripOperation.ProfitLoss = ticks * roundTripOperation.Contract.TickMoneyValue;
+        roundTripOperation.Fees = roundTripOperation.Contract.FeesForContract * quantity * 2;
+
+        return roundTripOperation;
+    }
+
+
+    //private List<RoundTripOperation> GenerateRoundTripOperations(List<Operation> operations)
+    //{
+    //    var roundTripOperations = new List<RoundTripOperation>();
+
+    //    for (int i = 0; i < operations.Count; i += 2)
+    //    {
+    //        var openOperation = operations[i];
+    //        var closeOperation = operations[i + 1];
+
+
+    //        //What will happen if we have two orders with the same type?
+    //        //This can happen if you open 2 positions long, because we are now ordering the data
+    //        var roundTripOperation = new RoundTripOperation
+    //        {
+    //            Contract = openOperation.Contract,
+    //            Type = openOperation.Type,
+    //            Quantity = openOperation.Quantity,
+    //            OpenOperation = openOperation,
+    //            CloseOperation = closeOperation,
+    //            BuyOperation = openOperation.Type == OperationType.Buy ? openOperation : closeOperation,
+    //            SellOperation = closeOperation.Type == OperationType.Sell ? closeOperation : openOperation,
+    //        };
+
+    //        decimal ticks;
+    //        if (roundTripOperation.Type == OperationType.Buy)
+    //            ticks = (roundTripOperation.CloseOperation.TradePrice * roundTripOperation.CloseOperation.Quantity) - (roundTripOperation.OpenOperation.TradePrice * roundTripOperation.OpenOperation.Quantity);
+    //        else
+    //            ticks = (roundTripOperation.OpenOperation.TradePrice * roundTripOperation.OpenOperation.Quantity) - (roundTripOperation.CloseOperation.TradePrice * roundTripOperation.CloseOperation.Quantity);
+
+    //        ticks /= roundTripOperation.Contract.TickMovement;
+    //        roundTripOperation.Ticks = ticks;
+    //        roundTripOperation.ProfitLoss = ticks * roundTripOperation.Contract.TickMoneyValue;
+    //        roundTripOperation.Fees = roundTripOperation.Contract.FeesForContract * roundTripOperation.Quantity * 2;
+
+    //        roundTripOperations.Add(roundTripOperation);
+    //    }
+
+    //    return roundTripOperations;
+    //}
 
     private string ReportDetailForRoundTripOperation(RoundTripOperation roundTripOperation)
     {
@@ -233,10 +334,10 @@ public class ReportGenerator
     }
 
     //I need the information of the Purchase & Sale table, that is the second table available in the Pdf Report
-    private List<string> GetAllTextualLinesFromPurceaseSaleTable()
+    private List<string> GetAllTextualLinesFromPurceaseSaleTable(string inputReportName)
     {
         List<string> resultLines = new List<string>();
-        string filenameComplete = Path.Combine(Directory.GetCurrentDirectory(), "Input", _inputReportName);
+        string filenameComplete = Path.Combine(Directory.GetCurrentDirectory(), "Input", inputReportName);
         using (var document = PdfDocument.Open(filenameComplete))
         {
             string startWord = "DEBIT/CREDIT";
