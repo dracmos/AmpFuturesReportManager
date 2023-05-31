@@ -1,4 +1,6 @@
 ﻿
+using AmpFuturesReportManager.Modes;
+
 namespace AmpFuturesReportManager.Application.Modes;
 
 public enum ReportType
@@ -53,12 +55,22 @@ public abstract class Contract
 
 public class RusselMicro : Contract
 {
-    public override string Name { get; set; } = "M2K";
+    public override string Name { get; set; } = Tickers.RusselMicro;
     public override decimal TickMovement { get; set; } = 0.1M;
     public override decimal TickMoneyValue { get; set; } = 0.5M;
     public override decimal FeesForContract { get; set; } = 0.62M;
     public override string Market { get; set; } = "CME";
 }
+
+public class DowMicro : Contract
+{
+    public override string Name { get; set; } = Tickers.DowMicro;
+    public override decimal TickMovement { get; set; } = 1M;
+    public override decimal TickMoneyValue { get; set; } = 0.5M;
+    public override decimal FeesForContract { get; set; } = 0.62M;
+    public override string Market { get; set; } = "CBOT";
+}
+
 
 public class OrderFromCSV
 {

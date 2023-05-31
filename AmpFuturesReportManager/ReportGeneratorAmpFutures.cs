@@ -6,6 +6,7 @@ using UglyToad.PdfPig;
 using AmpFuturesReportManager.Application.Modes;
 using CsvHelper.Configuration;
 using CsvHelper;
+using AmpFuturesReportManager.Modes;
 
 namespace AmpFuturesReportManager.Application;
 
@@ -111,7 +112,6 @@ public class ReportGenerator
             {
                 Operation operation = new()
                 {
-                    Date = DateTime.ParseExact(record.FillT, "dd/MM/yy HH:mm:ss", CultureInfo.InvariantCulture),
                     TradeNumber = long.Parse(record.Hash),
                     Quantity = record.Qty,
                     Type = record.BS == "BUY" ? OperationType.Buy : OperationType.Sell,
@@ -119,6 +119,22 @@ public class ReportGenerator
                     TradePrice = decimal.Parse(record.AvgFillP.Replace(",", "."), CultureInfo.InvariantCulture),
                     Currency = "USD"
                 };
+
+                bool isDateTime = DateTime.TryParseExact(record.FillT, "dd/MM/yy HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime fillDateTime);
+
+                if (!isDateTime)
+                {
+                    bool isTime = DateTime.TryParseExact(record.FillT, "HH:mm:ss",
+                        CultureInfo.InvariantCulture, DateTimeStyles.None, out fillDateTime);
+
+                    if (isTime)
+                        fillDateTime = DateTime.Today + fillDateTime.TimeOfDay;
+                    else
+                    {
+                        throw new Exception("Unable to parse the Date Time of Fill");
+                    }
+                }
+                operation.Date = fillDateTime;
                 operation.Contract = GetContract(operation.ContractDescription);
                 operation.Market = operation.Contract.Market;
 
@@ -206,15 +222,21 @@ public class ReportGenerator
     private Contract GetContract(string contractDescription)
     {
         string[] contractDescriptionWords = contractDescription.Split(' ');
-        Contract contract;
-        if (contractDescriptionWords.Length > 0 && contractDescriptionWords[0].Contains("M2K"))
+        Contract? contract = null;
+        if (contractDescriptionWords.Length > 0)
         {
-            contract = new RusselMicro();
+            if (contractDescriptionWords[0].Contains(Tickers.RusselMicro))
+            {
+                contract = new RusselMicro();
+            }
+            else if (contractDescriptionWords[0].Contains(Tickers.DowMicro))
+            {
+                contract = new DowMicro();
+            }
         }
-        else
-        {
+
+        if (contract == null)
             throw new Exception("Contract not yet mapped");
-        }
 
         return contract;
     }

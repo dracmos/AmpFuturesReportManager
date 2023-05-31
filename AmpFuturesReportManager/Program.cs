@@ -1,5 +1,6 @@
 ﻿using AmpFuturesReportManager.Application;
 using AmpFuturesReportManager.Application.Modes;
+using Microsoft.Extensions.Configuration;
 
 // Execute that command from the command prompt in the project folder to generate a self contained file:
 //dotnet publish -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeAllContentForSelfExtract=true
@@ -8,11 +9,22 @@ namespace AmpFuturesReportManager
 {
     class Program
     {
+        private static IConfiguration BuildConfig()
+        {
+            return new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
+        }
+
         static void Main(string[] args)
         {
             ReportGenerator reportGenerator;
 
-            ReportType _reportType = ReportType.CQG;
+            IConfiguration config = BuildConfig();
+            string myType = config.GetValue<string>("type");
+
+            ReportType _reportType = myType == "AMP" ? ReportType.AMPFutures : ReportType.CQG;
 
             string extension = "*.csv";
             if (_reportType == ReportType.AMPFutures)
